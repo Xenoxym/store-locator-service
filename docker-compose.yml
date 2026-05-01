@@ -1,0 +1,80 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: store-locator-postgres
+    restart: always
+
+    environment:
+      POSTGRES_USER: store_user
+      POSTGRES_PASSWORD: store_password
+      POSTGRES_DB: store_locator
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U store_user -d store_locator"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: store-locator-redis
+    restart: always
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - redis_data:/data
+
+    command: redis-server --appendonly yes
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: store-locator-api
+    restart: always
+
+    environment:
+      DATABASE_URL: postgresql://store_user:store_password@postgres:5432/store_locator
+
+      JWT_SECRET_KEY: change-this-to-a-long-secret-key-at-least-32-bytes
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 15
+      REFRESH_TOKEN_EXPIRE_DAYS: 7
+
+      REDIS_URL: redis://redis:6379/0
+      GEOCODING_CACHE_TTL_SECONDS: 2592000
+      SEARCH_CACHE_TTL_SECONDS: 600
+
+      RATE_LIMIT_PER_MINUTE: 10
+      RATE_LIMIT_PER_HOUR: 100
+
+      US_CENSUS_GEOCODER_URL: https://geocoding.geo.census.gov/geocoder/locations/onelineaddress
+      US_CENSUS_BENCHMARK: Public_AR_Current
+      ZIPPOPOTAMUS_URL: https://api.zippopotam.us/us
+
+      PORT: 8080
+
+    ports:
+      - "8000:8080"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

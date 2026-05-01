@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+python-dotenv
+pydantic
+pydantic-settings
+geopy
+PyJWT
+bcrypt
+python-multipart
+pytest
+httpx
+email-validator
+redis
+requests
+pytest-cov
