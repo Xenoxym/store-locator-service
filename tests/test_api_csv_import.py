@@ -15,6 +15,9 @@ INVALID_ROW_CSV = """store_id,name,store_type,status,latitude,longitude,address_
 S0202,Bad Row Store,wrong_type,active,999,-73.9800,202 CSV Street,New York,NY,10001,USA,212-555-0202,pickup,08:00-22:00,08:00-22:00,08:00-22:00,08:00-22:00,08:00-22:00,09:00-21:00,10:00-20:00
 """
 
+CSV_MISSING_COORDINATES = """store_id,name,store_type,status,address_street,address_city,address_state,address_postal_code,address_country,phone,services,hours_mon,hours_tue,hours_wed,hours_thu,hours_fri,hours_sat,hours_sun
+S0400,CSV Auto Geocoded Store,regular,active,350 5th Ave,New York,NY,10118,USA,212-555-0400,pickup|returns,08:00-22:00,08:00-22:00,08:00-22:00,08:00-22:00,08:00-22:00,09:00-21:00,10:00-20:00
+"""
 
 def test_admin_can_import_valid_csv(client, admin_headers):
     files = {
@@ -182,3 +185,44 @@ def test_integration_csv_import_then_search_with_mocked_geocoding(client, admin_
 
     store_ids = [store["store_id"] for store in search_response.json()["results"]]
     assert "S0200" in store_ids
+
+
+def test_csv_import_auto_geocodes_missing_coordinates(client, admin_headers):
+    files = {
+        "file": (
+            "stores_missing_coordinates.csv",
+            CSV_MISSING_COORDINATES,
+            "text/csv",
+        )
+    }
+
+    with patch(
+        "app.services.csv_import.geocode_address",
+        return_value={
+            "lat": 40.7484,
+            "lon": -73.9857,
+            "display_name": "350 5th Ave, New York, NY 10118",
+            "source": "us_census",
+        },
+    ):
+        response = client.post(
+            "/api/admin/stores/import",
+            headers=admin_headers,
+            files=files,
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["created"] == 1
+    assert data["failed"] == 0
+
+    detail_response = client.get(
+        "/api/admin/stores/S0400",
+        headers=admin_headers,
+    )
+
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["latitude"] == 40.7484
+    assert detail["longitude"] == -73.9857

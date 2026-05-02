@@ -10,3 +10,7 @@ htmlcov/
 Thumbs.db
 .env
 *.log
+scripts/deploy/gcp-config.ps1
+cloudrun-env.yaml
+cloudrun-env.generated.yaml
+gcp-vars.generated.ps1

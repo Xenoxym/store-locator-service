@@ -12,8 +12,8 @@ class AdminStoreCreate(BaseModel):
     store_type: str
     status: str = "active"
 
-    latitude: float = Field(ge=-90, le=90)
-    longitude: float = Field(ge=-180, le=180)
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
 
     address_street: str
     address_city: str

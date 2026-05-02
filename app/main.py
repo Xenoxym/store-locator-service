@@ -8,6 +8,7 @@ from app.models import Store, StoreService, User, Role, Permission, RolePermissi
 from app.api.stores import router as stores_router
 from app.api.auth import router as auth_router
 from app.api.admin_stores import router as admin_stores_router
+from app.api.admin_users import router as admin_users_router
 from app.core.redis_client import check_redis_connection
 
 
@@ -30,6 +31,7 @@ app.add_middleware(
 app.include_router(stores_router)
 app.include_router(auth_router)
 app.include_router(admin_stores_router)
+app.include_router(admin_users_router)
 
 
 @app.get("/health")

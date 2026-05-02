@@ -4,6 +4,41 @@ A production-style Store Locator API service for a multi-location retail busines
 
 The system supports public store search by address, ZIP code, or latitude/longitude, and secure internal store management with JWT authentication and role-based access control.
 
+This repository is aligned with the course **Deliverables (Section 8)** expectations:
+
+| Deliverable | Where it lives |
+|---|---|
+| **8.1 Code repository** | Clear layout under `app/`, `tests/`, `scripts/`, `migrations/`; `requirements.txt`; `.env.example` |
+| **8.2 Documentation** | This README (setup, API, auth, distance, deployment); schema summary below; sample requests; interactive API at `/docs` |
+| **8.3 Testing** | `pytest` suite; coverage instructions; last run: **56 passed**, **88%** line coverage on `app/` |
+| **8.4 Deployment** | Docker / `docker-compose`; GCP (Cloud Run, Cloud SQL, Memorystore) — see [Deployment](#deployment) and `GCP_DEPLOYMENT_GUIDE.md` |
+
+## Framework and CSV processing choices
+
+- **Framework:** **FastAPI** on Uvicorn — automatic OpenAPI (`/docs` / `/redoc`), Pydantic validation, dependency injection for database sessions and RBAC.
+- **CSV batch import:** Python standard library **`csv`** (with `io.StringIO`), **not pandas** — keeps the dependency set small, streams rows for validation, and fits the all-or-nothing transaction used for upserts.
+
+## Architecture overview
+
+```text
+Clients (curl, Swagger, browser)
+            |
+            v
+    +---------------+
+    |  FastAPI app  |  JWT auth, RBAC, rate limits
+    +---+-------+---+
+        |       |
+        |       +----------------------------+
+        v                                      v
+  PostgreSQL                             Redis (Memorystore)
+  stores, users,                         geocode cache,
+  roles, refresh tokens                  search cache, rate limit keys
+        |
+        +--> Optional: US Census Geocoder, Zippopotam.us (HTTP)
+```
+
+Public search geocodes addresses/ZIPs when needed, applies a **bounding-box** SQL pre-filter, then exact **geodesic** distance (see [Distance calculation](#distance-calculation-method)).
+
 ## Features
 
 ### Public Store Search
@@ -39,6 +74,8 @@ The system supports public store search by address, ZIP code, or latitude/longit
 - `PATCH /api/admin/stores/{store_id}`
 - `DELETE /api/admin/stores/{store_id}`
 
+**Create (`POST`) — coordinates:** If `latitude` and `longitude` are **both omitted**, the service **auto-geocodes** the store from the full address (street, city, state, postal code, country), with a fallback to **ZIP-only** geocoding when needed. If you pass one of lat/lon, you must pass **both** (matches the course requirement: auto-geocode when coordinates are not provided).
+
 Delete is implemented as a soft delete by setting:
 
 ```text
@@ -72,8 +109,16 @@ Roles:
 - Supports upsert:
   - existing `store_id` -> update
   - new `store_id` -> create
+- **Auto-geocode when coordinates are missing:** If a row has no `latitude` / `longitude` (or both empty), coordinates are resolved by geocoding the row’s address (then postal code if needed), same idea as project spec §2.3.
 - Replaces store services during update
 - Returns detailed import report
+
+### Admin User Management (admin role only)
+
+- `POST /api/admin/users` — create user
+- `GET /api/admin/users` — list users (pagination)
+- `PUT /api/admin/users/{user_id}` — update role or active status
+- `DELETE /api/admin/users/{user_id}` — deactivate user (`is_active = false`)
 
 ### Testing
 
@@ -82,11 +127,11 @@ Roles:
 - Integration tests
 - Mocked external geocoding calls using `unittest.mock.MagicMock` and `patch`
 - Redis/rate-limit behavior tested with mocks
-- Current result:
+- Latest local run (see [Testing](#testing)):
 
 ```text
-40 passed
-Total coverage: 83%
+56 passed
+app/ line coverage: 88%
 ```
 
 ---
@@ -119,7 +164,8 @@ store-locator-service/
 │   ├── api/
 │   │   ├── auth.py
 │   │   ├── stores.py
-│   │   └── admin_stores.py
+│   │   ├── admin_stores.py
+│   │   └── admin_users.py
 │   ├── core/
 │   │   ├── config.py
 │   │   ├── dependencies.py
@@ -136,7 +182,8 @@ store-locator-service/
 │   ├── schemas/
 │   │   ├── auth.py
 │   │   ├── store.py
-│   │   └── admin_store.py
+│   │   ├── admin_store.py
+│   │   └── admin_user.py
 │   ├── services/
 │   │   ├── auth_service.py
 │   │   ├── cache.py
@@ -146,17 +193,27 @@ store-locator-service/
 │   │   ├── hours.py
 │   │   └── store_search.py
 │   └── main.py
+├── migrations/
+│   └── 001_initial_schema.sql
 ├── scripts/
+│   ├── __init__.py
 │   ├── load_stores.py
-│   └── seed_users.py
+│   ├── seed_users.py
+│   └── deploy/
+│       ├── load-gcp-vars.ps1
+│       ├── gcp-config.ps1          (gitignored; copy from guide)
+│       ├── rebuild-push-deploy.ps1
+│       └── seed-cloudsql.ps1
 ├── tests/
 ├── data/
 │   ├── stores_50.csv
-│   └── stores_1000.csv
+│   ├── stores_1000.csv
+│   └── stores_missing_coordinates.csv
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
 ├── .env.example
+├── GCP_DEPLOYMENT_GUIDE.md
 └── README.md
 ```
 
@@ -222,16 +279,29 @@ docker compose ps
 
 ### 4. Create database schema
 
+**Option A — SQL migration (recommended for production-style setup):**
+
+```bash
+psql "$DATABASE_URL" -f migrations/001_initial_schema.sql
+```
+
+On Windows PowerShell (URI may need quoting depending on your shell):
+
+```powershell
+psql $env:DATABASE_URL -f migrations/001_initial_schema.sql
+```
+
+**Option B — SQLAlchemy create-all (local development):**
+
 ```bash
 python -c "from app.db.base import Base; from app.db.session import engine; import app.models; Base.metadata.create_all(bind=engine)"
 ```
 
 ### 5. Load store data
 
-If direct script execution cannot import `app`, run scripts as modules:
+Run as a module (requires `scripts` as a package — `scripts/__init__.py` is included):
 
 ```bash
-type nul > scripts\__init__.py
 python -m scripts.load_stores data/stores_1000.csv
 ```
 
@@ -280,11 +350,15 @@ http://127.0.0.1:8000/docs
 
 ## API Documentation
 
-Swagger UI:
+Interactive **OpenAPI** documentation is served by FastAPI:
 
-```text
-/docs
-```
+| Resource | Local | Production (GCP Cloud Run) |
+|---|---|---|
+| Swagger UI | [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) | [https://store-locator-service-xlp6wxlioa-uc.a.run.app/docs](https://store-locator-service-xlp6wxlioa-uc.a.run.app/docs) |
+| ReDoc | [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc) | [https://store-locator-service-xlp6wxlioa-uc.a.run.app/redoc](https://store-locator-service-xlp6wxlioa-uc.a.run.app/redoc) |
+| OpenAPI JSON | [http://127.0.0.1:8000/openapi.json](http://127.0.0.1:8000/openapi.json) | [https://store-locator-service-xlp6wxlioa-uc.a.run.app/openapi.json](https://store-locator-service-xlp6wxlioa-uc.a.run.app/openapi.json) |
+
+**Production API root:** [https://store-locator-service-xlp6wxlioa-uc.a.run.app/](https://store-locator-service-xlp6wxlioa-uc.a.run.app/) (`GET /` returns `docs` and `health` links).
 
 Health check:
 
@@ -339,6 +413,33 @@ curl -X POST "http://127.0.0.1:8000/api/stores/search" \
     "address": "4600 Silver Hill Rd, Washington, DC 20233",
     "radius_miles": 20
   }'
+```
+
+### Admin — list users (admin access token required)
+
+```bash
+curl -X GET "http://127.0.0.1:8000/api/admin/users?page=1&page_size=20" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+Example success shape:
+
+```json
+{
+  "total": 3,
+  "page": 1,
+  "page_size": 20,
+  "results": [
+    {
+      "user_id": "U001",
+      "email": "admin@test.com",
+      "role_id": "admin",
+      "role_name": "admin",
+      "is_active": true,
+      "must_change_password": false
+    }
+  ]
+}
 ```
 
 ---
@@ -462,6 +563,8 @@ This reduces the number of stores that need exact distance calculation.
 
 ## Database Schema Overview
 
+The canonical PostgreSQL DDL for an empty database is in `migrations/001_initial_schema.sql` (roles, permissions, `role_permissions`, `stores`, `store_services`, `users`, `refresh_tokens`). After applying it, run `python -m scripts.seed_users` to insert roles, permissions, and demo users.
+
 ### stores
 
 Stores core store profile, address, location, hours, and status.
@@ -543,17 +646,17 @@ Run coverage:
 pytest --cov=app --cov-report=term-missing
 ```
 
-Generate HTML coverage report:
+Generate HTML coverage report (output in `htmlcov/index.html`):
 
 ```bash
 pytest --cov=app --cov-report=html
 ```
 
-Current result:
+Latest run in this repository:
 
 ```text
-40 passed
-Total coverage: 83%
+56 passed
+TOTAL (app/): 88% line coverage
 ```
 
 Test suite coverage includes:
@@ -572,6 +675,7 @@ Test suite coverage includes:
 - Redis cache behavior
 - IP-based rate limiting
 - Mocked external geocoding calls
+- Admin user CRUD-style endpoints (admin-only)
 
 ---
 
@@ -580,7 +684,7 @@ Test suite coverage includes:
 Final deployment platform:
 
 ```text
-Google Cloud Platform
+Google Cloud Platform (GCP)
 ```
 
 Components:
@@ -590,16 +694,26 @@ Components:
 | API server | Cloud Run |
 | Container image | Artifact Registry |
 | Database | Cloud SQL for PostgreSQL |
-| Cache / rate limit | Memorystore Redis |
-| Redis private access | Serverless VPC Access Connector |
+| Cache / rate limit | Memorystore (Redis) |
+| Redis private access | Serverless VPC Access connector |
 
-Production URLs:
+Automation scripts (PowerShell) live under `scripts/deploy/` — copy/edit `gcp-config.ps1` from `GCP_DEPLOYMENT_GUIDE.md` (the committed `.gitignore` excludes local secrets files such as `gcp-config.ps1` and generated env exports).
 
-```text
-API Base URL: <YOUR_CLOUD_RUN_URL>
-Swagger: <YOUR_CLOUD_RUN_URL>/docs
-Health: <YOUR_CLOUD_RUN_URL>/health
-```
+**Deployed service (this project):**
+
+| Endpoint | URL |
+|---|---|
+| API root | [https://store-locator-service-xlp6wxlioa-uc.a.run.app/](https://store-locator-service-xlp6wxlioa-uc.a.run.app/) |
+| Swagger UI | [https://store-locator-service-xlp6wxlioa-uc.a.run.app/docs](https://store-locator-service-xlp6wxlioa-uc.a.run.app/docs) |
+| Health | [https://store-locator-service-xlp6wxlioa-uc.a.run.app/health](https://store-locator-service-xlp6wxlioa-uc.a.run.app/health) |
+
+**Demo logins** (after `python -m scripts.seed_users` on that database; change passwords in real deployments):
+
+| Role | Email | Password |
+|---|---|---|
+| Admin | admin@test.com | AdminTest123! |
+| Marketer | marketer@test.com | MarketerTest123! |
+| Viewer | viewer@test.com | ViewerTest123! |
 
 ### Deployment Summary
 
@@ -608,22 +722,22 @@ Health: <YOUR_CLOUD_RUN_URL>/health
 3. Create Cloud SQL PostgreSQL instance
 4. Deploy FastAPI container to Cloud Run
 5. Connect Cloud Run to Cloud SQL
-6. Initialize Cloud SQL schema and data through Cloud SQL Auth Proxy
+6. Apply schema (`migrations/001_initial_schema.sql` or proxy + `create_all`) and seed users/data (`scripts/deploy/seed-cloudsql.ps1` or manual proxy)
 7. Create Memorystore Redis
 8. Create Serverless VPC Access connector
-9. Connect Cloud Run to Redis
-10. Verify `/health`, `/docs`, public search, login, and admin APIs
+9. Connect Cloud Run to Redis (private IP + connector)
+10. Verify `/health`, `/docs`, public search, login, admin store APIs, and admin user APIs
 
-Detailed deployment commands are documented in `GCP_DEPLOYMENT_GUIDE.md`.
+Step-by-step commands and variable templates are in `GCP_DEPLOYMENT_GUIDE.md`.
 
 ---
 
 ## Production Notes
 
 - Do not commit `.env`.
-- Use a strong `JWT_SECRET_KEY`.
+- Use a strong `JWT_SECRET_KEY` (see `.env.example`).
 - Avoid running `Base.metadata.create_all(bind=engine)` during Cloud Run startup.
-- Initialize production schema and seed data through script or migration.
+- Initialize production schema with `migrations/001_initial_schema.sql` (or your migration runner) and seed via scripts.
 - Restrict CORS origins for a real frontend.
 - Use Secret Manager for production secrets.
 - Delete or stop Cloud SQL and Memorystore resources when not needed to avoid charges.
@@ -671,7 +785,7 @@ No physical database row is deleted.
 
 ## Future Improvements
 
-- Alembic migrations instead of manual `create_all`
+- Optional Alembic revision history on top of the baseline SQL in `migrations/`
 - Secret Manager integration for all production secrets
 - CI/CD with Cloud Build or GitHub Actions
 - Dedicated user management endpoints

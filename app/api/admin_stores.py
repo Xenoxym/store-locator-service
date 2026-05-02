@@ -15,6 +15,7 @@ from app.schemas.admin_store import (
     CSVImportResponse,
 )
 from app.services.csv_import import import_stores_from_csv
+from app.services.geocoding import geocode_address, geocode_postal_code
 
 router = APIRouter(
     prefix="/api/admin/stores",
@@ -45,6 +46,51 @@ def serialize_store(store: Store) -> dict:
         "hours_sat": store.hours_sat,
         "hours_sun": store.hours_sun,
     }
+
+
+def resolve_coordinates_for_store_create(
+    db: Session,
+    request: AdminStoreCreate,
+) -> tuple[float, float]:
+    """
+    Resolve coordinates for store creation.
+
+    If latitude and longitude are provided, use them.
+    If both are missing, auto-geocode from full address.
+    If only one is missing, reject the request.
+    """
+    has_lat = request.latitude is not None
+    has_lon = request.longitude is not None
+
+    if has_lat and has_lon:
+        return request.latitude, request.longitude
+
+    if has_lat != has_lon:
+        raise HTTPException(
+            status_code=400,
+            detail="latitude and longitude must be provided together, or both omitted for auto-geocoding.",
+        )
+
+    full_address = (
+        f"{request.address_street}, "
+        f"{request.address_city}, "
+        f"{request.address_state} "
+        f"{request.address_postal_code}, "
+        f"{request.address_country}"
+    )
+
+    try:
+        location = geocode_address(db, full_address)
+    except ValueError:
+        try:
+            location = geocode_postal_code(db, request.address_postal_code)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not auto-geocode store address. Provide latitude and longitude manually.",
+            )
+
+    return location["lat"], location["lon"]
 
 
 @router.get("", response_model=StoreListResponse)
@@ -120,13 +166,15 @@ def create_store(
     if existing_store:
         raise HTTPException(status_code=400, detail="Store already exists")
 
+    latitude, longitude = resolve_coordinates_for_store_create(db, request)
+
     store = Store(
         store_id=request.store_id,
         name=request.name,
         store_type=request.store_type,
         status=request.status,
-        latitude=request.latitude,
-        longitude=request.longitude,
+        latitude=latitude,
+        longitude=longitude,
         address_street=request.address_street,
         address_city=request.address_city,
         address_state=request.address_state,
@@ -141,7 +189,7 @@ def create_store(
         hours_sat=request.hours_sat,
         hours_sun=request.hours_sun,
     )
-
+    
     db.add(store)
     db.flush()
 

@@ -1,0 +1,126 @@
+================================================================================
+PYTEST COVERAGE REPORT (Section 8.3)
+Command: python -m pytest -v --cov=app --cov-report=term-missing
+Encoding: UTF-8 with BOM (recommended for Windows and UTF-8-aware editors)
+================================================================================
+
+============================= test session starts =============================
+platform win32 -- Python 3.12.3, pytest-9.0.3, pluggy-1.6.0 -- C:\Users\Luo Chengqian\Desktop\Pilot-ICC\HomeWork\202603PythonDev\Final_project\store-locator-service\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\Luo Chengqian\Desktop\Pilot-ICC\HomeWork\202603PythonDev\Final_project\store-locator-service
+plugins: anyio-4.13.0, cov-7.1.0
+collecting ... collected 56 items
+
+tests/test_api_auth_admin.py::test_login_success PASSED                  [  1%]
+tests/test_api_auth_admin.py::test_login_failure_wrong_password PASSED   [  3%]
+tests/test_api_auth_admin.py::test_refresh_token_success PASSED          [  5%]
+tests/test_api_auth_admin.py::test_logout_revokes_refresh_token PASSED   [  7%]
+tests/test_api_auth_admin.py::test_admin_can_list_stores PASSED          [  8%]
+tests/test_api_auth_admin.py::test_viewer_can_list_stores PASSED         [ 10%]
+tests/test_api_auth_admin.py::test_unauthenticated_user_cannot_list_stores PASSED [ 12%]
+tests/test_api_auth_admin.py::test_admin_can_create_store PASSED         [ 14%]
+tests/test_api_auth_admin.py::test_viewer_cannot_create_store PASSED     [ 16%]
+tests/test_api_auth_admin.py::test_marketer_can_patch_store PASSED       [ 17%]
+tests/test_api_auth_admin.py::test_patch_rejects_forbidden_latitude_field PASSED [ 19%]
+tests/test_api_auth_admin.py::test_delete_soft_deactivates_store PASSED  [ 21%]
+tests/test_api_auth_admin.py::test_admin_can_create_user PASSED          [ 23%]
+tests/test_api_auth_admin.py::test_admin_can_list_users PASSED           [ 25%]
+tests/test_api_auth_admin.py::test_admin_can_update_user_role_and_status PASSED [ 26%]
+tests/test_api_auth_admin.py::test_admin_can_deactivate_user PASSED      [ 28%]
+tests/test_api_auth_admin.py::test_marketer_cannot_manage_users PASSED   [ 30%]
+tests/test_api_auth_admin.py::test_viewer_cannot_manage_users PASSED     [ 32%]
+tests/test_api_auth_admin.py::test_create_user_rejects_duplicate_email PASSED [ 33%]
+tests/test_api_auth_admin.py::test_create_user_rejects_invalid_role PASSED [ 35%]
+tests/test_api_auth_admin.py::test_update_user_rejects_non_existing_user PASSED [ 37%]
+tests/test_api_auth_admin.py::test_admin_can_create_store_without_coordinates_using_geocoding PASSED [ 39%]
+tests/test_api_csv_import.py::test_admin_can_import_valid_csv PASSED     [ 41%]
+tests/test_api_csv_import.py::test_csv_import_upserts_existing_store PASSED [ 42%]
+tests/test_api_csv_import.py::test_viewer_cannot_import_csv PASSED       [ 44%]
+tests/test_api_csv_import.py::test_csv_import_rejects_invalid_header PASSED [ 46%]
+tests/test_api_csv_import.py::test_csv_import_rejects_invalid_row PASSED [ 48%]
+tests/test_api_csv_import.py::test_csv_import_rejects_non_csv_file PASSED [ 50%]
+tests/test_api_csv_import.py::test_integration_csv_import_then_search_with_mocked_geocoding PASSED [ 51%]
+tests/test_api_csv_import.py::test_csv_import_auto_geocodes_missing_coordinates PASSED [ 53%]
+tests/test_api_search.py::test_search_by_coordinates PASSED              [ 55%]
+tests/test_api_search.py::test_search_by_postal_code_with_mocked_geocoding PASSED [ 57%]
+tests/test_api_search.py::test_search_by_address_with_mocked_geocoding PASSED [ 58%]
+tests/test_api_search.py::test_search_services_and_filter PASSED         [ 60%]
+tests/test_api_search.py::test_search_store_types_or_filter PASSED       [ 62%]
+tests/test_api_search.py::test_search_does_not_return_inactive_stores PASSED [ 64%]
+tests/test_api_search.py::test_search_requires_exactly_one_input_type PASSED [ 66%]
+tests/test_cache_rate_limit.py::test_set_cache_and_get_cache_with_mocked_redis PASSED [ 67%]
+tests/test_cache_rate_limit.py::test_get_cache_returns_none_on_missing_key PASSED [ 69%]
+tests/test_cache_rate_limit.py::test_rate_limit_allows_requests_under_limit PASSED [ 71%]
+tests/test_cache_rate_limit.py::test_rate_limit_blocks_more_than_10_per_minute PASSED [ 73%]
+tests/test_cache_rate_limit.py::test_rate_limit_blocks_more_than_100_per_hour PASSED [ 75%]
+tests/test_geocoding_mock.py::test_geocode_zip_with_zippopotamus_success PASSED [ 76%]
+tests/test_geocoding_mock.py::test_geocode_zip_with_zippopotamus_404_returns_none PASSED [ 78%]
+tests/test_geocoding_mock.py::test_geocode_with_us_census_success PASSED [ 80%]
+tests/test_geocoding_mock.py::test_geocode_with_us_census_no_match_returns_none PASSED [ 82%]
+tests/test_geocoding_mock.py::test_geocode_postal_code_uses_cache_before_external_api PASSED [ 83%]
+tests/test_unit_distance.py::test_calculate_bounding_box_contains_center PASSED [ 85%]
+tests/test_unit_distance.py::test_calculate_bounding_box_has_valid_range PASSED [ 87%]
+tests/test_unit_distance.py::test_calculate_distance_miles_same_point_is_zero_or_near_zero PASSED [ 89%]
+tests/test_unit_distance.py::test_calculate_distance_miles_between_nyc_and_boston PASSED [ 91%]
+tests/test_unit_hours_security.py::test_password_hash_and_verify_success PASSED [ 92%]
+tests/test_unit_hours_security.py::test_password_verify_failure PASSED   [ 94%]
+tests/test_unit_hours_security.py::test_is_store_open_now_true PASSED    [ 96%]
+tests/test_unit_hours_security.py::test_is_store_open_now_false_when_closed_day PASSED [ 98%]
+tests/test_unit_hours_security.py::test_is_store_open_now_false_outside_hours PASSED [100%]
+
+============================== warnings summary ===============================
+app\core\config.py:4
+  C:\Users\Luo Chengqian\Desktop\Pilot-ICC\HomeWork\202603PythonDev\Final_project\store-locator-service\app\core\config.py:4: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class Settings(BaseSettings):
+
+tests/test_api_auth_admin.py: 20 warnings
+tests/test_api_csv_import.py: 8 warnings
+  C:\Users\Luo Chengqian\Desktop\Pilot-ICC\HomeWork\202603PythonDev\Final_project\store-locator-service\.venv\Lib\site-packages\jwt\api_jwt.py:147: InsecureKeyLengthWarning: The HMAC key is 22 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+    return self._jws.encode(
+
+tests/test_api_auth_admin.py: 19 warnings
+tests/test_api_csv_import.py: 8 warnings
+  C:\Users\Luo Chengqian\Desktop\Pilot-ICC\HomeWork\202603PythonDev\Final_project\store-locator-service\.venv\Lib\site-packages\jwt\api_jwt.py:365: InsecureKeyLengthWarning: The HMAC key is 22 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+    decoded = self.decode_complete(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=============================== tests coverage ================================
+_______________ coverage: platform win32, python 3.12.3-final-0 _______________
+
+Name                           Stmts   Miss  Cover   Missing
+------------------------------------------------------------
+app\api\__init__.py                0      0   100%
+app\api\admin_stores.py           94     12    87%   69, 84-88, 149, 167, 221, 232, 246, 277
+app\api\admin_users.py            57      1    98%   143
+app\api\auth.py                   15      0   100%
+app\api\stores.py                 14      2    86%   26-27
+app\core\__init__.py               0      0   100%
+app\core\config.py                18      0   100%
+app\core\dependencies.py          28      5    82%   21-22, 25, 30, 33
+app\core\rate_limit.py            22      1    95%   63
+app\core\redis_client.py           8      4    50%   13-16
+app\core\security.py              26      0   100%
+app\db\__init__.py                 0      0   100%
+app\db\base.py                     3      0   100%
+app\db\session.py                 10      4    60%   17-21
+app\main.py                       22      2    91%   39, 47
+app\models\__init__.py             3      0   100%
+app\models\auth.py                31      0   100%
+app\models\store.py               36      0   100%
+app\models\user.py                16      0   100%
+app\schemas\__init__.py            0      0   100%
+app\schemas\admin_store.py        72      0   100%
+app\schemas\admin_user.py         22      0   100%
+app\schemas\auth.py               17      0   100%
+app\schemas\store.py              48      2    96%   32, 36
+app\services\__init__.py           0      0   100%
+app\services\auth_service.py      53      9    83%   22, 25, 65-66, 69, 80, 91, 96, 120
+app\services\cache.py             22      8    64%   18-19, 29-31, 35-38
+app\services\csv_import.py       178     28    84%   81, 90, 98, 107, 113, 116, 121, 126-127, 130, 133, 136, 157, 163, 172, 181-182, 187-189, 192, 195, 201, 216, 220-221, 250-251
+app\services\distance.py           9      0   100%
+app\services\geocoding.py         83     36    57%   10, 35, 66-67, 90-91, 96, 104, 120-130, 143-160, 184-198, 210-231
+app\services\hours.py             16      2    88%   41-42
+app\services\store_search.py      54      3    94%   34, 92, 102
+------------------------------------------------------------
+TOTAL                            977    119    88%
+====================== 56 passed, 56 warnings in 58.02s =======================

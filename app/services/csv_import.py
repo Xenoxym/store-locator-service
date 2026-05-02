@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models.store import Store, StoreService
+from app.services.geocoding import geocode_address, geocode_postal_code
 
 
 EXPECTED_HEADERS = [
@@ -13,8 +14,6 @@ EXPECTED_HEADERS = [
     "name",
     "store_type",
     "status",
-    "latitude",
-    "longitude",
     "address_street",
     "address_city",
     "address_state",
@@ -46,11 +45,57 @@ VALID_SERVICES = {
 }
 
 
+REQUIRED_HEADERS = [
+    "store_id",
+    "name",
+    "store_type",
+    "status",
+    "address_street",
+    "address_city",
+    "address_state",
+    "address_postal_code",
+    "address_country",
+    "phone",
+    "services",
+    "hours_mon",
+    "hours_tue",
+    "hours_wed",
+    "hours_thu",
+    "hours_fri",
+    "hours_sat",
+    "hours_sun",
+]
+
+
+OPTIONAL_HEADERS = [
+    "latitude",
+    "longitude",
+]
+
+
+ALLOWED_HEADERS = REQUIRED_HEADERS + OPTIONAL_HEADERS
+
+
 def validate_headers(headers: list[str] | None) -> None:
-    if headers != EXPECTED_HEADERS:
+    if headers is None:
+        raise ValueError("CSV file has no headers")
+
+    missing_required = [header for header in REQUIRED_HEADERS if header not in headers]
+    unknown_headers = [header for header in headers if header not in ALLOWED_HEADERS]
+
+    has_lat = "latitude" in headers
+    has_lon = "longitude" in headers
+
+    if has_lat != has_lon:
         raise ValueError(
-            f"Invalid CSV headers. Expected exact headers: {EXPECTED_HEADERS}. Got: {headers}"
+            "CSV must include both latitude and longitude columns, or omit both for auto-geocoding"
         )
+
+    if missing_required:
+        raise ValueError(f"Missing required CSV headers: {missing_required}")
+
+    if unknown_headers:
+        raise ValueError(f"Unknown CSV headers: {unknown_headers}")
 
 
 def is_valid_open_time(hour: int, minute: int) -> bool:
@@ -99,8 +144,6 @@ def validate_row(row: dict[str, str], row_number: int) -> None:
         "name",
         "store_type",
         "status",
-        "latitude",
-        "longitude",
         "address_street",
         "address_city",
         "address_state",
@@ -119,19 +162,31 @@ def validate_row(row: dict[str, str], row_number: int) -> None:
     if row.get("status") and row["status"] not in VALID_STATUSES:
         errors.append(f"invalid status: {row['status']}")
 
-    try:
-        latitude = float(row["latitude"])
-        if not (-90 <= latitude <= 90):
-            errors.append("latitude must be between -90 and 90")
-    except Exception:
-        errors.append("latitude must be a valid number")
+    latitude_value = row.get("latitude", "")
+    longitude_value = row.get("longitude", "")
 
-    try:
-        longitude = float(row["longitude"])
-        if not (-180 <= longitude <= 180):
-            errors.append("longitude must be between -180 and 180")
-    except Exception:
-        errors.append("longitude must be a valid number")
+    has_lat = bool(latitude_value)
+    has_lon = bool(longitude_value)
+
+    if has_lat != has_lon:
+        errors.append(
+            "latitude and longitude must be provided together, or both omitted for auto-geocoding"
+        )
+
+    if has_lat and has_lon:
+        try:
+            latitude = float(latitude_value)
+            if not (-90 <= latitude <= 90):
+                errors.append("latitude must be between -90 and 90")
+        except Exception:
+            errors.append("latitude must be a valid number")
+
+        try:
+            longitude = float(longitude_value)
+            if not (-180 <= longitude <= 180):
+                errors.append("longitude must be between -180 and 180")
+        except Exception:
+            errors.append("longitude must be a valid number")
 
     if row.get("address_state") and len(row["address_state"]) != 2:
         errors.append("address_state must be 2 characters")
@@ -169,6 +224,35 @@ def validate_row(row: dict[str, str], row_number: int) -> None:
         raise ValueError(f"Row {row_number}: " + "; ".join(errors))
 
 
+def resolve_coordinates_for_csv_row(db: Session, row: dict[str, str]) -> tuple[float, float]:
+    """
+    Resolve coordinates for one CSV row.
+
+    If latitude/longitude are present, use them.
+    If both are missing, auto-geocode from address.
+    """
+    latitude_value = row.get("latitude", "")
+    longitude_value = row.get("longitude", "")
+
+    if latitude_value and longitude_value:
+        return float(latitude_value), float(longitude_value)
+
+    full_address = (
+        f"{row['address_street']}, "
+        f"{row['address_city']}, "
+        f"{row['address_state']} "
+        f"{row['address_postal_code']}, "
+        f"{row['address_country']}"
+    )
+
+    try:
+        result = geocode_address(db, full_address)
+    except ValueError:
+        result = geocode_postal_code(db, row["address_postal_code"])
+
+    return result["lat"], result["lon"]
+
+
 def upsert_store(db: Session, row: dict[str, str]) -> str:
     existing_store = (
         db.query(Store)
@@ -187,8 +271,10 @@ def upsert_store(db: Session, row: dict[str, str]) -> str:
     store.name = row["name"]
     store.store_type = row["store_type"]
     store.status = row["status"]
-    store.latitude = float(row["latitude"])
-    store.longitude = float(row["longitude"])
+
+    latitude, longitude = resolve_coordinates_for_csv_row(db, row)
+    store.latitude = latitude
+    store.longitude = longitude
 
     store.address_street = row["address_street"]
     store.address_city = row["address_city"]
